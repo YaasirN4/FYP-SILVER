@@ -1,0 +1,29 @@
+@startuml
+left to right direction
+
+skinparam packageStyle rectangle
+
+actor "User" as user
+actor "AI Predictor Engine" as engine
+
+package "Silver Price Forecasting App" {
+  usecase "View Baseline Forecast" as UC1
+  usecase "Input Economic Scenario" as UC2
+  usecase "Extract Sentiment & Factors" as UC3
+  usecase "Calculate Market Simulation" as UC4
+  usecase "Display Interactive UI Chart" as UC5
+}
+
+user --> UC1 : Views
+user --> UC2 : Inputs text prompt
+user --> UC5 : Interacts with
+
+UC2 ..> UC3 : <<includes>>
+UC3 ..> UC4 : <<includes>>
+UC4 ..> UC5 : <<includes>>
+
+engine --> UC3 : Processes NLP
+engine --> UC4 : Runs Stochastic ARIMA
+engine --> UC5 : Renders Plotly UI
+
+@enduml

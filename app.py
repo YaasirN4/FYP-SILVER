@@ -4,6 +4,8 @@ import numpy as np
 import plotly.graph_objects as go
 from textblob import TextBlob
 import time
+import json
+import google.generativeai as genai
 
 st.set_page_config(page_title="Silver Simulator AI", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
 
@@ -31,14 +33,76 @@ st.title("🛡️ Silver Price Forecasting AI")
 st.markdown("<p style='text-align: center; color: #888;'>Scenario-Based Simulator with NLP Sentiment Tracking & Stochastic ARIMA</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# 2. Advanced NLP Interpretation Engine
-def advanced_interpret(scenario_text):
-    text = scenario_text.lower()
+# --- SIDEBAR CONFIGURATION ---
+with st.sidebar:
+    st.header("⚙️ App Settings")
+    st.markdown("Enter your free [Google Gemini API Key](https://aistudio.google.com/app/apikey) below to enable highly-advanced AI scenario parsing. Without it, the app will use basic keyword analysis.")
+    api_key = st.text_input("Gemini API Key", type="password", help="Get a free key at aistudio.google.com")
+    st.markdown("---")
+    st.caption("**Market Sensitivity Config:** High")
     
-    # Base params
+    if api_key:
+        genai.configure(api_key=api_key)
+        st.success("Gemini API Enabled!")
+    else:
+        st.warning("Using Fallback NLP (Keyword-based)")
+
+# 2. Advanced NLP Interpretation Engine
+def advanced_interpret(scenario_text, use_gemini=False):
+    # Base fallback params
     trend_adj = 0.0
     vol_adj = 1.0
     reasons = []
+    
+    # --- GEMINI AI ROUTINE ---
+    if use_gemini:
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            prompt = f"""
+            Act as an expert commodities trader and quantitative analyst. Analyze the following news scenario and determine its theoretical impact on silver prices over the next 30 days.
+            Silver is a safe-haven asset, an inflation hedge, and heavily used in industry (solar panels, electronics). It trades inversely to the USD.
+            
+            We are operating a HIGH SENSITIVITY model. Major global crises or massive industrial booms should cause extreme swings.
+            Output your findings as a strict JSON object with exactly three keys:
+            1. "trend_adj": A float representing the % price change trajectory. e.g., 0.15 (+15%), -0.25 (-25%), 0.50 (+50%). Min is -0.50, Max is 0.50. Be aggressive if the news warrants it.
+            2. "vol_adj": A float representing the volatility multiplier. 1.0 is normal. 2.0 is double volatility. 4.0 is extreme chaos/panic. Min 0.5, Max 5.0.
+            3. "reasoning": A single short string explaining your quantitative choices in aggressive trading terms.
+            
+            Scenario text: "{scenario_text}"
+            
+            Return ONLY the valid JSON object. No markdown, no "```json", just the raw JSON.
+            """
+            
+            response = model.generate_content(prompt)
+            # Clean up potential markdown formatting from the response
+            response_text = response.text.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text.replace("```json", "", 1)
+            if response_text.startswith("```"):
+                response_text = response_text.replace("```", "", 1)
+            if response_text.endswith("```"):
+                response_text = response_text[::-1].replace("```", "", 1)[::-1]
+            response_text = response_text.strip()
+            
+            data = json.loads(response_text)
+            
+            trend_adj = float(data.get("trend_adj", 0.0))
+            vol_adj = float(data.get("vol_adj", 1.0))
+            reason_str = list((data.get("reasoning", "Gemini processed the text but provided no reason.")).split('\n'))
+            
+            # Ensure bounds are respected even if Gemini goes rogue
+            trend_adj = max(min(trend_adj, 0.50), -0.50) # Extremely High Sensitivity allowed
+            vol_adj = max(min(vol_adj, 5.0), 0.5)
+            
+            reason_str[0] = "🤖 **Gemini AI Analysis:** " + reason_str[0]
+            return trend_adj, vol_adj, reason_str
+            
+        except Exception as e:
+            reasons.append(f"⚠️ Gemini API failed: {e}. Falling back to basic NLP.")
+            # Fall through to TextBlob logic...
+
+    # --- FALLBACK TEXTBLOB/KEYWORD ROUTINE ---
+    text = scenario_text.lower()
     
     # Sentiment Analysis (Fear/Positivity) using TextBlob
     blob = TextBlob(text)
@@ -46,35 +110,35 @@ def advanced_interpret(scenario_text):
     
     # Highly negative sentiment = Fear/Uncertainty -> Higher Volatility and slight price bump (Safe Haven)
     if sentiment < -0.1:
-        vol_adj += abs(sentiment) * 2.0  # Scales up to +2.0x based on fear
-        trend_adj += 0.02
-        reasons.append(f"Negative sentiment detected ({sentiment:.2f}). Increasing volatility risk.")
-    elif sentiment > 0.3:
-        vol_adj *= 0.9 # Slight drop in volatility for positive outlook
-        reasons.append(f"Positive sentiment detected ({sentiment:.2f}). Market stability limits volatility.")
-        
-    # Keyword Explicit Rules (Overrides or Adds)
-    if "inflation" in text:
+        vol_adj += abs(sentiment) * 3.0  # Scales up aggressively
         trend_adj += 0.05
-        vol_adj += 0.2
-        reasons.append("Inflation keyword: Adding +5% trend. Silver acts as an inflation hedge.")
+        reasons.append(f"Negative sentiment detected ({sentiment:.2f}). Escalating volatility risk heavily.")
+    elif sentiment > 0.3:
+        vol_adj *= 0.8
+        reasons.append(f"Positive sentiment detected ({sentiment:.2f}). Reducing volatility factor.")
+        
+    # Keyword Explicit Rules (High Sensitivity overrides)
+    if "inflation" in text:
+        trend_adj += 0.15
+        vol_adj += 0.5
+        reasons.append("Inflation flag: Pricing in strong +15% aggressive upside scenario.")
     if "usd" in text or "dollar" in text or "fed" in text:
-        trend_adj -= 0.05
-        reasons.append("USD keyword: Strong dollar natively pulls silver prices down (-5%).")
+        trend_adj -= 0.15
+        reasons.append("USD strength flag: Pricing in steep -15% commodity selloff.")
     if "demand" in text or "industry" in text:
-        trend_adj += 0.10
-        reasons.append("Industrial demand keyword: Adding +10% strong uptrend.")
-    if "war" in text or "crisis" in text or "uncertainty" in text or "crash" in text:
-        trend_adj += 0.08
-        vol_adj += 1.0
-        reasons.append("Crisis explicitly detected: Massive uncertainty triggers safe-haven buying (+8%).")
+        trend_adj += 0.20
+        reasons.append("Industrial demand flag: Supercycle priced in, appending +20% run-up.")
+    if "war" in text or "crisis" in text or "crash" in text:
+        trend_adj += 0.30
+        vol_adj += 3.0
+        reasons.append("Crisis explicitly triggered: Max fear cycle initiated, massive +30% safe-haven premium.")
         
     if not reasons:
-        reasons.append("No specific keywords. Relied purely on NLP Sentiment mathematical baseline.")
+        reasons.append("No specific keywords. Baseline sentiment adjustments applied.")
         
-    # Cap parameters for realism
-    trend_adj = max(min(trend_adj, 0.20), -0.20) # Max 20% swing
-    vol_adj = max(min(vol_adj, 4.0), 0.5)        # 0.5x to 4.0x vol
+    # Cap parameters for high sensitivity realism
+    trend_adj = max(min(trend_adj, 0.50), -0.50) # Expanded from 20% to 50%
+    vol_adj = max(min(vol_adj, 5.0), 0.5)        
     
     return trend_adj, vol_adj, reasons
 
@@ -115,7 +179,8 @@ if prompt := st.chat_input("Type your economic event here (e.g., 'Inflation is o
         # Artificial delay to feel the AI "thinking"
         time.sleep(1.5)
         
-        trend_adj, vol_adj, reasons = advanced_interpret(prompt)
+        has_key = True if api_key else False
+        trend_adj, vol_adj, reasons = advanced_interpret(prompt, use_gemini=has_key)
         
         explanation = f"**Simulation Engine Results:**\n"
         explanation += "\n".join([f"- {r}" for r in reasons])
