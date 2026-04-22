@@ -154,11 +154,11 @@ if "messages" not in st.session_state:
     ]
 
 # Display Chat History
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         if "fig" in message:
-            st.plotly_chart(message["fig"], use_container_width=True)
+            st.plotly_chart(message["fig"], use_container_width=True, key=f"chart_{i}")
         if "proc_txt" in message:
             st.markdown(message["proc_txt"])
 
@@ -253,7 +253,7 @@ if prompt := st.chat_input("Type your economic event here (e.g., 'Inflation is o
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor='rgba(0,0,0,0.5)')
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"chart_active_{len(st.session_state.messages)}")
         
         # 8. Procurement ROI Engine
         current_cost = req_ounces * current_spot_price

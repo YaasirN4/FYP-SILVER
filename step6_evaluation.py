@@ -1,73 +1,97 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from statsmodels.tsa.arima.model import ARIMA
 import warnings
 
 warnings.filterwarnings("ignore")
 
-print("STEP 6: Model Evaluation")
+print("Generating Model Evaluation Chart: Actual vs. Predicted (60-Day Window)...")
 
 # 1. Load data
 df = pd.read_csv("cleaned_silver_prices.csv", index_col='Date', parse_dates=True)
 prices = df['Close']
 
-# 2. Split data into train/test
-# We use the last 60 days as the "test" set to evaluate model performance
+# 2. Split data into train/test (Last 60 days for testing)
 test_size = 60
 train = prices.iloc[:-test_size]
 test = prices.iloc[-test_size:]
 
-print(f"Total data points: {len(prices)}")
-print(f"Training data points: {len(train)}")
-print(f"Testing data points (The 'Future' we hide from the model): {len(test)}")
-
 # 3. Train the model ONLY on the training data
-print("\nTraining ARIMA model on the training set...")
+print("Training ARIMA(5, 1, 0) on training set...")
 model = ARIMA(train, order=(5, 1, 0))
 model_fit = model.fit()
 
 # 4. Generate forecast for the test period
-print("Forecasting the test period...")
+print("Generating 60-day out-of-sample forecast...")
 forecast = model_fit.forecast(steps=test_size)
 forecast.index = test.index  # Align dates
 
-# 5. Calculate RMSE, MAE, and MAPE
-# RMSE (Root Mean Squared Error): Typical error in price dollars (punishes large errors)
+# 5. Calculate Metrics
 rmse = np.sqrt(np.mean((test - forecast)**2))
-
-# MAE (Mean Absolute Error): Average absolute difference in dollars
 mae = np.mean(np.abs(test - forecast))
-
-# MAPE (Mean Absolute Percentage Error): Error as a percentage
 mape = np.mean(np.abs((test - forecast) / test)) * 100
 
-print("\n--- Evaluation Results ---")
-print(f"RMSE (Root Mean Sq Error): ${rmse:.2f}")
-print(f"MAE  (Mean Absolute Error): ${mae:.2f}")
-print(f"MAPE (Mean Abs % Error):   {mape:.2f}%")
+# 6. Premium Visualization
+plt.figure(figsize=(15, 8), facecolor='#0d1117')
+ax = plt.gca()
+ax.set_facecolor('#0d1117')
 
-print("\n--- What does this mean? ---")
-print(f"Your model's predictions are, on average, off by ${rmse:.2f} compared to the actual price.")
-print(f"In percentage terms, the model's predictions differ from actual prices by about {mape:.2f}%.")
-# A MAPE under 10% is usually considered excellent forecasting.
+# Plot Training Context (Last 120 days of training)
+plt.plot(train.index[-120:], train.iloc[-120:], color='#58a6ff', 
+         label='Training Data (History)', alpha=0.5, linewidth=1.5)
 
+# Plot Actual Test Data
+plt.plot(test.index, test, color='#39d353', label='Actual Price (Ground Truth)', 
+         linewidth=2.5, zorder=3)
+
+# Plot ARIMA Forecast
+plt.plot(forecast.index, forecast, color='#ff7b72', label='ARIMA Model Prediction', 
+         linestyle='--', linewidth=2.5, zorder=4)
+
+# Error Shading (Fill between actual and predicted)
+plt.fill_between(test.index, test, forecast, color='#ff7b72', alpha=0.1, label='Prediction Error')
+
+# Formatting
+plt.title('ARIMA(5,1,0) Backtesting — Actual vs. Predicted\nTarget: 60-Day Testing Window', 
+          color='#e6edf3', fontsize=16, fontweight='bold', pad=20, loc='left')
+
+plt.xlabel('Date', color='#8b949e', fontsize=12)
+plt.ylabel('Silver Price (USD / oz)', color='#8b949e', fontsize=12)
+plt.xticks(color='#8b949e')
+plt.yticks(color='#8b949e')
+
+# Grid
+plt.grid(True, color='#21262d', linestyle='--', alpha=0.6)
+
+# Hide top/right spines
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.spines['left'].set_color('#30363d')
+ax.spines['bottom'].set_color('#30363d')
+
+# Metrics Box
+metrics_text = (f"Model Metrics:\n"
+                f"RMSE: ${rmse:.2f}\n"
+                f"MAE:  ${mae:.2f}\n"
+                f"MAPE: {mape:.1f}%")
+plt.text(0.02, 0.95, metrics_text, transform=ax.transAxes, color='white', 
+         fontsize=11, fontweight='bold', verticalalignment='top',
+         bbox=dict(facecolor='#161b22', alpha=0.8, edgecolor='#30363d', boxstyle='round,pad=1'))
+
+# Legend
+plt.legend(facecolor='#161b22', edgecolor='#30363d', labelcolor='#e6edf3', 
+           fontsize=10, loc='lower right')
+
+plt.tight_layout()
+plt.savefig('silver_actual_vs_predicted.png', dpi=150, facecolor='#0d1117')
+print(f"[DONE] Saved comparison chart to 'silver_actual_vs_predicted.png'")
+
+# Save metrics to file
 with open("evaluation_metrics.txt", "w") as f:
     f.write(f"RMSE: {rmse:.2f}\n")
-    f.write(f"MAPE: {mape:.2f}\n")
+    f.write(f"MAE: {mae:.2f}\n")
+    f.write(f"MAPE: {mape:.2f}%\n")
 
-# 6. Plot the results to visually see Train vs Test vs Forecast
-plt.figure(figsize=(12, 6))
-# Plot last 200 days of train for context
-plt.plot(train.index[-200:], train.iloc[-200:], label='Training Data')
-plt.plot(test.index, test, label='Actual Test Data (Hidden from model)', color='green')
-plt.plot(forecast.index, forecast, label='Model Forecast', color='red', linestyle='dashed', linewidth=2)
-
-plt.title(f'ARIMA Performance on Test Data (MAPE: {mape:.2f}%)')
-plt.xlabel('Date')
-plt.ylabel('Price (USD)')
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig('silver_evaluation.png')
-print("\nSuccess! Saved evaluation graph to 'silver_evaluation.png'")
+plt.close()
