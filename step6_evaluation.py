@@ -32,16 +32,20 @@ print("Forecasting the test period...")
 forecast = model_fit.forecast(steps=test_size)
 forecast.index = test.index  # Align dates
 
-# 5. Calculate RMSE and MAPE
-# RMSE (Root Mean Squared Error): Typical error in price dollars
+# 5. Calculate RMSE, MAE, and MAPE
+# RMSE (Root Mean Squared Error): Typical error in price dollars (punishes large errors)
 rmse = np.sqrt(np.mean((test - forecast)**2))
+
+# MAE (Mean Absolute Error): Average absolute difference in dollars
+mae = np.mean(np.abs(test - forecast))
 
 # MAPE (Mean Absolute Percentage Error): Error as a percentage
 mape = np.mean(np.abs((test - forecast) / test)) * 100
 
 print("\n--- Evaluation Results ---")
-print(f"RMSE (Root Mean Squared Error): ${rmse:.2f}")
-print(f"MAPE (Mean Abs Percentage Error): {mape:.2f}%")
+print(f"RMSE (Root Mean Sq Error): ${rmse:.2f}")
+print(f"MAE  (Mean Absolute Error): ${mae:.2f}")
+print(f"MAPE (Mean Abs % Error):   {mape:.2f}%")
 
 print("\n--- What does this mean? ---")
 print(f"Your model's predictions are, on average, off by ${rmse:.2f} compared to the actual price.")
