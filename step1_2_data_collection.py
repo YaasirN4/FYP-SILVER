@@ -3,7 +3,7 @@ import pandas as pd
 
 print("Downloading Silver Price Data (Ticker: SI=F)...")
 # Download data
-silver_data = yf.download("SI=F", start="2010-01-01", end="2024-01-01")
+silver_data = yf.download("SI=F", start="2010-01-01")
 
 print("\n--- First 5 rows of the dataset ---")
 print(silver_data.head())

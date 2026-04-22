@@ -39,6 +39,12 @@ with st.sidebar:
     st.markdown("Enter your free [Google Gemini API Key](https://aistudio.google.com/app/apikey) below to enable highly-advanced AI scenario parsing. Without it, the app will use basic keyword analysis.")
     api_key = st.text_input("Gemini API Key", type="password", help="Get a free key at aistudio.google.com")
     st.markdown("---")
+    st.header("🏢 Business Procurement Options")
+    st.markdown("Calculate real-world ROI based on the AI forecast.")
+    req_ounces = st.number_input("Required Silver (Ounces)", min_value=0, max_value=1_000_000, value=50000, step=1000)
+    current_spot_price = st.number_input("Proxy Spot Price ($/oz)", min_value=10.0, max_value=150.0, value=28.5, step=0.1)
+
+    st.markdown("---")
     st.caption("**Market Sensitivity Config:** High")
     
     if api_key:
@@ -76,13 +82,12 @@ def advanced_interpret(scenario_text, use_gemini=False):
             response = model.generate_content(prompt)
             # Clean up potential markdown formatting from the response
             response_text = response.text.strip()
-            if response_text.startswith("```json"):
-                response_text = response_text.replace("```json", "", 1)
-            if response_text.startswith("```"):
-                response_text = response_text.replace("```", "", 1)
-            if response_text.endswith("```"):
-                response_text = response_text[::-1].replace("```", "", 1)[::-1]
-            response_text = response_text.strip()
+            # Robust JSON extraction to prevent markdown crashes
+            start_idx = response_text.find('{')
+            end_idx = response_text.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                response_text = response_text[start_idx:end_idx+1]
+
             
             data = json.loads(response_text)
             
@@ -154,6 +159,8 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
         if "fig" in message:
             st.plotly_chart(message["fig"], use_container_width=True)
+        if "proc_txt" in message:
+            st.markdown(message["proc_txt"])
 
 # 4. Load Data
 @st.cache_data
@@ -248,5 +255,23 @@ if prompt := st.chat_input("Type your economic event here (e.g., 'Inflation is o
         
         st.plotly_chart(fig, use_container_width=True)
         
+        # 8. Procurement ROI Engine
+        current_cost = req_ounces * current_spot_price
+        # Predict end-of-month price
+        future_predicted_price = current_spot_price * (1 + trend_adj)
+        future_cost = req_ounces * future_predicted_price
+        savings = current_cost - future_cost 
+        
+        procurement_summary = f"### 🏢 Procurement Impact Engine\n"
+        procurement_summary += f"**Scenario Impact on {req_ounces:,} oz Purchase Requirement:**\n"
+        if trend_adj > 0:
+            procurement_summary += f"\n> ⚠️ **BUY NOW RECOMMENDATION:** The model forecasts an aggressive price surge. Purchasing today avoids an estimated **${abs(savings):,.2f}** in extra future costs."
+        elif trend_adj < 0:
+            procurement_summary += f"\n> ✅ **WAIT RECOMMENDATION:** The model forecasts a price drop. Delaying your purchase by 30 days will save your business an estimated **${abs(savings):,.2f}**."
+        else:
+            procurement_summary += f"\n> ⚖️ **NEUTRAL RECOMMENDATION:** Prices are stable. Buy according to your normal schedule."
+            
+        st.info(procurement_summary)
+        
         # Save to history so it doesn't disappear when they chat again
-        st.session_state.messages.append({"role": "assistant", "content": explanation, "fig": fig})
+        st.session_state.messages.append({"role": "assistant", "content": explanation, "fig": fig, "proc_txt": procurement_summary})
